@@ -1,6 +1,5 @@
 import os
 import requests
-import numpy as np
 from scipy.stats import poisson
 from flask import Flask, jsonify
 
@@ -8,6 +7,8 @@ app = Flask(__name__)
 
 API_KEY = os.environ.get("API_KEY")
 
+LEAGUE_ID = 253
+SEASON = 2025
 LEAGUE_AVG = 3.0
 
 def calculate_over25(home_scored, home_conceded,
@@ -30,17 +31,54 @@ def calculate_over25(home_scored, home_conceded,
     implied_prob = 1 / odd
     value = prob_over_25 - implied_prob
 
-    return {
-        "prob_over_2_5": round(prob_over_25, 3),
-        "implied_probability": round(implied_prob, 3),
-        "value": round(value, 3)
-    }
+    return prob_over_25, implied_prob, value
+
 
 @app.route("/")
-def home():
-    analysis = calculate_over25(
-        1.7, 1.5,
-        1.6, 1.6,
-        1.70
-    )
-    return jsonify(analysis)
+def get_games():
+
+    url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
+
+    headers = {
+        "X-RapidAPI-Key": API_KEY,
+        "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com"
+    }
+
+    params = {
+        "league": LEAGUE_ID,
+        "season": SEASON,
+        "next": 5
+    }
+
+    response = requests.get(url, headers=headers, params=params)
+    data = response.json()
+
+    results = []
+
+    for game in data["response"]:
+
+        home = game["teams"]["home"]["name"]
+        away = game["teams"]["away"]["name"]
+
+        home_scored = 1.7
+        home_conceded = 1.4
+        away_scored = 1.5
+        away_conceded = 1.6
+
+        odd = 1.75
+
+        prob, implied, value = calculate_over25(
+            home_scored,
+            home_conceded,
+            away_scored,
+            away_conceded,
+            odd
+        )
+
+        results.append({
+            "match": f"{home} x {away}",
+            "prob_over_2_5": round(prob,3),
+            "value": round(value,3)
+        })
+
+    return jsonify(results)
